@@ -1,184 +1,157 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ghost Messenger Pro</title>
-    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-database-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-storage-compat.js"></script>
-    <style>
-        :root { --bg: #ffffff; --text: #000; --chat-bg: #f9f9f9; }
-        body.dark-mode { --bg: #121212; --text: #ffffff; --chat-bg: #1e1e1e; }
-        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); transition: 0.3s; margin: 0; padding: 20px; }
-        #chat-box { height: 400px; overflow-y: auto; border: 1px solid #ddd; padding: 15px; background: var(--chat-bg); border-radius: 10px; }
-        #status-bar { padding: 10px; border-bottom: 2px solid #34B7F1; margin-bottom: 10px; font-size: 0.9em; }
-        .controls { display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
-        input[type="text"] { flex: 1; padding: 10px; border-radius: 5px; border: 1px solid #ccc; }
-        button { padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
-        .btn-send { background: #25D366; color: white; }
-        .btn-img { background: #34B7F1; color: white; }
-        .btn-voice { background: #f44336; color: white; }
-        .msg-img { max-width: 200px; border-radius: 8px; display: block; margin: 5px 0; }
-        #typing-info { font-size: 0.8em; color: #888; height: 15px; margin: 5px 0; }
-    </style>
-</head>
-<body>
+const socket = io();
 
-    <button onclick="document.body.classList.toggle('dark-mode')" style="position:fixed; top:10px; right:10px;">🌙 Toggle</button>
+// --- DOM Elements ---
+const loginScreen = document.getElementById('login-screen');
+const chatScreen = document.getElementById('chat-screen');
+const loginForm = document.getElementById('login-form');
+const usernameInput = document.getElementById('username');
+const roomInput = document.getElementById('room-ip');
+const statusDiv = document.getElementById('status');
+const btnText = document.getElementById('btn-text');
+const btnLoader = document.getElementById('btn-loader');
+const messagesDiv = document.getElementById('messages');
+const messageInput = document.getElementById('message-input');
+const sendBtn = document.getElementById('send-btn');
+const displayRoom = document.getElementById('display-room');
+const displayUsername = document.getElementById('display-username');
+const leaveBtn = document.getElementById('leave-btn');
 
-    <div id="status-bar">
-        <strong>Room:</strong> <span id="room-display"></span> | 
-        <strong>Online:</strong> <span id="user-count">0</span>
-        <div id="online-list" style="color: #25D366; font-size: 0.8em;"></div>
-    </div>
+// Naya Element: Typing aur Online Users Status ke liye
+const typingDiv = document.createElement('div');
+typingDiv.id = "typing-indicator";
+typingDiv.style.fontSize = "12px";
+typingDiv.style.color = "gray";
+messagesDiv.after(typingDiv);
 
-    <div id="chat-box"></div>
-    <div id="typing-info"></div>
+const onlineCountDiv = document.createElement('div');
+onlineCountDiv.style.fontSize = "12px";
+onlineCountDiv.style.color = "#25D366";
+displayRoom.after(onlineCountDiv);
 
-    <div class="controls">
-        <input type="text" id="messageInput" placeholder="Type a message...">
-        <button class="btn-send" onclick="sendMessage()">Send</button>
-        <button class="btn-img" onclick="document.getElementById('fileInput').click()">📷 Image</button>
-        <button id="voiceBtn" class="btn-voice" onmousedown="startRecording()" onmouseup="stopRecording()">🎤 Voice</button>
-    </div>
+let currentUser = '';
+let currentRoom = '';
 
-    <input type="file" id="fileInput" accept="image/*" style="display:none" onchange="uploadFile(this.files[0])">
+// --- 1. Login Handle (No Password) ---
+loginForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const username = usernameInput.value.trim();
+    const room = roomInput.value.trim();
+    
+    if (!username || !room) return;
+    
+    currentUser = username;
+    currentRoom = room;
+    
+    btnText.classList.add('hidden');
+    btnLoader.classList.remove('hidden');
+    socket.emit('join-room', { username, room });
+});
 
-    <script>
-        // 1. Firebase Config (APNI DETAILS DALEIN)
-        const firebaseConfig = {
-            apiKey: "YOUR_API_KEY",
-            databaseURL: "YOUR_DATABASE_URL",
-            projectId: "YOUR_PROJECT_ID",
-            storageBucket: "YOUR_STORAGE_BUCKET"
-        };
-        firebase.initializeApp(firebaseConfig);
-        const database = firebase.database();
-        const storage = firebase.storage();
+// --- 2. Live Status & Joined confirmation ---
+socket.on('joined-room', ({ room, username }) => {
+    btnText.classList.remove('hidden');
+    btnLoader.classList.add('hidden');
+    loginScreen.classList.remove('active');
+    chatScreen.classList.add('active');
+    displayRoom.textContent = room;
+    displayUsername.textContent = username;
+    
+    messagesDiv.innerHTML = '';
+    addSystemMessage(`Welcome to room "${room}"`);
+});
 
-        // 2. Room & Security Setup
-        const roomId = window.location.hash.substring(1) || "Lobby_" + Math.floor(Math.random()*1000);
-        window.location.hash = roomId;
-        document.getElementById('room-display').innerText = roomId;
+// Room mein kitne log hain update karna
+socket.on('update-user-count', (count) => {
+    onlineCountDiv.textContent = `Online: ${count}`;
+});
 
-        const userName = prompt("Apna Naam Likhiye:") || "User" + Math.floor(Math.random()*100);
-        const roomPassword = prompt("Room Password Dalein:");
+// --- 3. Typing Indicator Logic ---
+messageInput.addEventListener('input', () => {
+    socket.emit('typing', { room: currentRoom, username: currentUser });
+});
 
-        const roomRef = database.ref('rooms/' + roomId);
-        const passRef = roomRef.child('password');
+socket.on('display-typing', (data) => {
+    if (data.username !== currentUser) {
+        typingDiv.textContent = data.isTyping ? `${data.username} is typing...` : '';
+    }
+});
 
-        // Password Verification
-        passRef.once('value').then(snap => {
-            if(!snap.val()) { passRef.set(roomPassword); initApp(); }
-            else if(snap.val() === roomPassword) { initApp(); }
-            else { alert("Galat Password!"); window.location.href = "/"; }
-        });
+// --- 4. New Message (Blue Tick & 60s Auto-Delete) ---
+socket.on('new-message', ({ username, message, timestamp }) => {
+    const isOwn = username === currentUser;
+    const msgElement = addMessage(username, message, isOwn, timestamp);
+    
+    // Seen status bhejona agar hamne message padha
+    if (!isOwn) {
+        socket.emit('mark-seen', { room: currentRoom, msgId: timestamp });
+    }
 
-        function initApp() {
-            // AUTO-DELETE ON EXIT
-            roomRef.onDisconnect().remove();
-
-            // Presence System
-            const myUserRef = roomRef.child('online_users').push();
-            myUserRef.set({ name: userName });
-            myUserRef.onDisconnect().remove();
-
-            // Listen for Messages
-            roomRef.child('messages').on('value', snap => {
-                const box = document.getElementById('chat-box');
-                box.innerHTML = "";
-                snap.forEach(child => {
-                    const m = child.val();
-                    const isMine = m.user === userName;
-                    
-                    // Mark as Seen
-                    if(!isMine && !m.seen) roomRef.child('messages').child(child.key).update({seen: true});
-
-                    let content = m.type === 'audio' ? `<audio controls src="${m.audio}"></audio>` : 
-                                  m.type === 'image' ? `<img class="msg-img" src="${m.image}">` : `<span>${m.text}</span>`;
-                    
-                    let tick = isMine ? (m.seen ? '<span style="color:#34B7F1"> ✔✔</span>' : ' ✔') : '';
-                    box.innerHTML += `<p><strong>${m.user}:</strong> ${content}${tick}</p>`;
-                });
-                box.scrollTop = box.scrollHeight;
-            });
-
-            // Typing Logic
-            const input = document.getElementById('messageInput');
-            input.addEventListener('input', () => {
-                const tRef = roomRef.child('typing').child(userName);
-                input.value ? tRef.set(true) : tRef.remove();
-            });
-            roomRef.child('typing').on('value', snap => {
-                const typers = Object.keys(snap.val() || {}).filter(u => u !== userName);
-                document.getElementById('typing-info').innerText = typers.length ? typers.join(",") + " is typing..." : "";
-            });
-
-            // Online List Update
-            roomRef.child('online_users').on('value', snap => {
-                const users = Object.values(snap.val() || {});
-                document.getElementById('user-count').innerText = users.length;
-                document.getElementById('online-list').innerText = users.map(u => u.name).join(", ");
-            });
+    // FEATURE: 60 Second Auto-Delete
+    setTimeout(() => {
+        if (msgElement) {
+            msgElement.style.opacity = '0';
+            msgElement.style.transform = 'translateX(20px)';
+            setTimeout(() => msgElement.remove(), 500); 
         }
+    }, 60000); 
+});
 
-        // --- HELPER FUNCTIONS ---
-        function sendMessage() {
-            const input = document.getElementById('messageInput');
-            if(!input.value) return;
-            roomRef.child('messages').push({ user: userName, text: input.value, seen: false });
-            input.value = "";
-            roomRef.child('typing').child(userName).remove();
-        }
+// Blue Tick Update karna
+socket.on('message-seen-update', (msgId) => {
+    const ticks = document.querySelector(`[data-id="${msgId}"] .ticks`);
+    if (ticks) {
+        ticks.textContent = ' ✔✔';
+        ticks.style.color = '#34B7F1';
+    }
+});
 
-        function uploadFile(file) {
-            const ref = storage.ref(`chat/${roomId}/${Date.now()}_${file.name}`);
-            ref.put(file).then(s => s.ref.getDownloadURL()).then(url => {
-                roomRef.child('messages').push({ user: userName, image: url, type: 'image', seen: false });
-            });
-        }
+// --- 5. Cleanup & Safety ---
+function cleanupAndLeave() {
+    if (currentRoom) {
+        socket.emit('leave-room', { room: currentRoom });
+    }
+    messagesDiv.innerHTML = ''; 
+    chatScreen.classList.remove('active');
+    loginScreen.classList.add('active');
+    window.location.reload(); // Hard reset for memory safety
+}
 
-        let mediaRecorder, chunks = [];
-        async function startRecording() {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            mediaRecorder = new MediaRecorder(stream);
-            chunks = [];
-            mediaRecorder.ondataavailable = e => chunks.push(e.data);
-            mediaRecorder.onstop = () => {
-                const blob = new Blob(chunks, { type: 'audio/webm' });
-                const ref = storage.ref(`chat/${roomId}/${Date.now()}.webm`);
-                ref.put(blob).then(s => s.ref.getDownloadURL()).then(url => {
-                    roomRef.child('messages').push({ user: userName, audio: url, type: 'audio', seen: false });
-                });
-            };
-            mediaRecorder.start();
-            document.getElementById('voiceBtn').innerText = "🔴 Rec...";
-        }
-        function stopRecording() { 
-            mediaRecorder.stop(); 
-            document.getElementById('voiceBtn').innerText = "🎤 Voice";
-        }
-    </script>
-</body>
-</html>
-                        timestamp: Date.now()
-                    });
-                    document.getElementById('messageInput').value = "";
-                }
-            };
+leaveBtn.addEventListener('click', cleanupAndLeave);
+window.addEventListener('beforeunload', cleanupAndLeave);
 
-            onChildAdded(messagesRef, (data) => {
-                const msg = data.val();
-                const div = document.createElement('div');
-                div.classList.add('msg');
-                div.classList.add(msg.sender === currentUser ? 'sent' : 'received');
-                
-                div.innerHTML = `<span class="msg-info">${msg.sender}</span>${msg.message}`;
-                chatBox.appendChild(div);
-                chatBox.scrollTop = chatBox.scrollHeight;
-            });
-        }
-    </script>
-</body>
-</html>
+// --- Helper Functions ---
+function addMessage(username, message, isOwn, timestamp) {
+    const div = document.createElement('div');
+    div.className = `message ${isOwn ? 'own' : 'other'}`;
+    div.setAttribute('data-id', timestamp);
+    div.style.transition = 'all 0.5s ease-out';
+    
+    const time = new Date(timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    const ticks = isOwn ? '<span class="ticks" style="color:gray;"> ✔</span>' : '';
+    
+    div.innerHTML = `
+        <div class="meta">${username} • ${time} ${ticks}</div>
+        <div class="text-content">${escapeHtml(message)}</div>
+    `;
+    
+    messagesDiv.appendChild(div);
+    scrollToBottom();
+    return div;
+}
+
+function addSystemMessage(text) {
+    const div = document.createElement('div');
+    div.className = 'message system';
+    div.textContent = text;
+    messagesDiv.appendChild(div);
+    setTimeout(() => div.remove(), 5000);
+    scrollToBottom();
+}
+
+function scrollToBottom() { messagesDiv.scrollTop = messagesDiv.scrollHeight; }
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
