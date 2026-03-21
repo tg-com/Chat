@@ -3,76 +3,125 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TG-COM Realtime Chat</title>
+    <title>My Chat - Room-Based Messenger</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        body { font-family: Arial, sans-serif; background: #f0f2f5; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        #chat-container { width: 90%; max-width: 400px; background: white; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); overflow: hidden; }
-        #chat-box { height: 400px; overflow-y: auto; padding: 15px; border-bottom: 1px solid #ddd; display: flex; flex-direction: column; }
-        .message { margin-bottom: 10px; padding: 8px 12px; border-radius: 15px; max-width: 80%; word-wrap: break-word; }
-        .received { background: #e4e6eb; align-self: flex-start; }
-        .sent { background: #0084ff; color: white; align-self: flex-end; }
-        .input-area { display: flex; padding: 10px; }
-        input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 5px; outline: none; }
-        button { padding: 10px 15px; background: #0084ff; color: white; border: none; border-radius: 5px; margin-left: 5px; cursor: pointer; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --primary-color: #6366f1; --primary-dark: #4f46e5; --bg-dark: #0f172a;
+            --bg-card: #1e293b; --bg-input: #334155; --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8; --border-color: #475569; --success-color: #10b981;
+        }
+        body { font-family: 'Inter', sans-serif; background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%); min-height: 100vh; color: var(--text-primary); overflow-x: hidden; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        header { text-align: center; padding: 40px 20px; }
+        .logo { font-size: 3rem; font-weight: 700; background: linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        
+        /* UI Screens */
+        #login-screen, #chat-screen { width: 100%; max-width: 450px; background: var(--bg-card); border-radius: 24px; padding: 40px; border: 1px solid var(--border-color); backdrop-filter: blur(10px); }
+        #chat-screen { display: none; max-width: 600px; }
+        
+        /* Chat Box Design */
+        #chat-box { height: 400px; overflow-y: auto; margin-bottom: 20px; padding: 10px; display: flex; flex-direction: column; gap: 10px; }
+        .msg { padding: 10px 15px; border-radius: 12px; max-width: 80%; font-size: 0.9rem; line-height: 1.4; }
+        .msg.sent { align-self: flex-end; background: var(--primary-color); color: white; }
+        .msg.received { align-self: flex-start; background: var(--bg-input); color: white; border: 1px solid var(--border-color); }
+        .msg-info { font-size: 0.7rem; color: var(--text-secondary); margin-bottom: 4px; display: block; }
+
+        input[type="text"] { width: 100%; padding: 15px; background: var(--bg-input); border: 2px solid var(--border-color); border-radius: 12px; color: white; margin-bottom: 15px; }
+        .btn-primary { width: 100%; padding: 16px; background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%); border: none; border-radius: 12px; color: white; font-weight: 600; cursor: pointer; }
+        .status { margin-top: 15px; font-size: 0.85rem; text-align: center; color: var(--success-color); }
     </style>
 </head>
 <body>
+    <div class="container">
+        <header><h1 class="logo">[MYCHAT]</h1></header>
 
-<div id="chat-container">
-    <div id="chat-box"></div>
-    <div class="input-area">
-        <input type="text" id="messageInput" placeholder="Type a message...">
-        <button id="sendBtn">Send</button>
+        <div id="login-screen">
+            <h2 style="text-align: center; margin-bottom: 20px;">Join Room</h2>
+            <input type="text" id="username" placeholder="Username">
+            <input type="text" id="roomcode" placeholder="Room Code (e.g. 1234)">
+            <button id="joinBtn" class="btn-primary">Join Chat Room</button>
+            <div id="status" class="status"></div>
+        </div>
+
+        <div id="chat-screen">
+            <h3 id="room-display" style="margin-bottom: 15px; color: var(--text-secondary);"></h3>
+            <div id="chat-box"></div>
+            <div style="display: flex; gap: 10px;">
+                <input type="text" id="messageInput" placeholder="Type message..." style="margin: 0;">
+                <button id="sendBtn" class="btn-primary" style="width: auto; padding: 0 20px;"><i class="fas fa-paper-plane"></i></button>
+            </div>
+        </div>
     </div>
-</div>
 
-<script type="module">
-    // Firebase CDN Imports
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getDatabase, ref, push, onChildAdded } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, push, onChildAdded } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-    // Aapka Firebase Config
-    const firebaseConfig = {
-        apiKey: "AIzaSyAC2NpHaaN8jTQg5G4GaISy76rnYSOGIqs",
-        authDomain: "my-chat-77ef9.firebaseapp.com",
-        databaseURL: "https://my-chat-77ef9-default-rtdb.asia-southeast1.firebasedatabase.app",
-        projectId: "my-chat-77ef9",
-        storageBucket: "my-chat-77ef9.firebasestorage.app",
-        messagingSenderId: "201184055478",
-        appId: "1:201184055478:web:98e67e97e0b6c1f80ed617"
-    };
+        const firebaseConfig = {
+            apiKey: "AIzaSyAC2NpHaaN8jTQg5G4GaISy76rnYSOGIqs",
+            authDomain: "my-chat-77ef9.firebaseapp.com",
+            databaseURL: "https://my-chat-77ef9-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "my-chat-77ef9",
+            storageBucket: "my-chat-77ef9.firebasestorage.app",
+            messagingSenderId: "201184055478",
+            appId: "1:201184055478:web:98e67e97e0b6c1f80ed617"
+        };
 
-    // Initialize Firebase
-    const app = initializeApp(firebaseConfig);
-    const db = getDatabase(app);
-    const messagesRef = ref(db, "messages");
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
 
-    const chatBox = document.getElementById('chat-box');
-    const messageInput = document.getElementById('messageInput');
-    const sendBtn = document.getElementById('sendBtn');
+        let currentUser = "";
+        let currentRoom = "";
 
-    // Message bhejne ka logic
-    sendBtn.onclick = () => {
-        const text = messageInput.value;
-        if (text.trim() !== "") {
-            push(messagesRef, {
-                message: text,
-                timestamp: Date.now()
+        // UI Elements
+        const loginScreen = document.getElementById('login-screen');
+        const chatScreen = document.getElementById('chat-screen');
+        const chatBox = document.getElementById('chat-box');
+        
+        document.getElementById('joinBtn').onclick = () => {
+            currentUser = document.getElementById('username').value.trim();
+            currentRoom = document.getElementById('roomcode').value.trim();
+            
+            if(currentUser && currentRoom) {
+                document.getElementById('status').innerText = "Connecting...";
+                setTimeout(() => {
+                    loginScreen.style.display = 'none';
+                    chatScreen.style.display = 'block';
+                    document.getElementById('room-display').innerText = `Room: ${currentRoom}`;
+                    startChat();
+                }, 1000);
+            }
+        };
+
+        function startChat() {
+            const messagesRef = ref(db, "rooms/" + currentRoom);
+
+            document.getElementById('sendBtn').onclick = () => {
+                const text = document.getElementById('messageInput').value;
+                if(text.trim() !== "") {
+                    push(messagesRef, {
+                        sender: currentUser,
+                        message: text,
+                        timestamp: Date.now()
+                    });
+                    document.getElementById('messageInput').value = "";
+                }
+            };
+
+            onChildAdded(messagesRef, (data) => {
+                const msg = data.val();
+                const div = document.createElement('div');
+                div.classList.add('msg');
+                div.classList.add(msg.sender === currentUser ? 'sent' : 'received');
+                
+                div.innerHTML = `<span class="msg-info">${msg.sender}</span>${msg.message}`;
+                chatBox.appendChild(div);
+                chatBox.scrollTop = chatBox.scrollHeight;
             });
-            messageInput.value = "";
         }
-    };
-
-    // Real-time message receive karne ka logic
-    onChildAdded(messagesRef, (data) => {
-        const msg = data.val();
-        const div = document.createElement('div');
-        div.classList.add('message', 'received'); // Default received class
-        div.innerText = msg.message;
-        chatBox.appendChild(div);
-        chatBox.scrollTop = chatBox.scrollHeight; // Auto scroll to bottom
-    });
-</script>
-
+    </script>
 </body>
 </html>
