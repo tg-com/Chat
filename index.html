@@ -3,226 +3,153 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ghost Chat | Anonymous & Secure</title>
-    <script src="/socket.io/socket.io.js"></script>
+    <title>Ghost Chat Pro | Secure & Fast</title>
+    
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js"></script>
+
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        body { background-color: #e5ddd5; height: 100vh; display: flex; justify-content: center; align-items: center; }
+        :root { --primary: #075e54; --accent: #25D366; --bg: #e5ddd5; --chat-bg: #efe7de; }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Helvetica, sans-serif; }
+        
+        body { background: var(--bg); height: 100vh; display: flex; justify-content: center; align-items: center; }
         .hidden { display: none !important; }
 
-        /* Login Screen */
-        #login-screen { background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); width: 350px; text-align: center; }
-        #login-screen h2 { margin-bottom: 20px; color: #075e54; }
-        input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ccc; border-radius: 5px; outline: none; }
-        #join-btn { width: 100%; padding: 12px; background: #25D366; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        /* Login UI */
+        #login-box { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); width: 350px; text-align: center; }
+        #login-box h2 { color: var(--primary); margin-bottom: 20px; font-weight: 800; }
+        input { width: 100%; padding: 12px; margin: 10px 0; border: 1.5px solid #eee; border-radius: 8px; outline: none; transition: 0.3s; }
+        input:focus { border-color: var(--accent); }
+        button { width: 100%; padding: 12px; background: var(--accent); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 16px; }
 
-        /* Chat Screen */
-        #chat-screen { width: 100%; height: 100%; display: flex; flex-direction: column; background: #efe7de; display: none; }
-        #chat-screen.active { display: flex; }
+        /* Chat UI */
+        #chat-ui { width: 100%; height: 100%; display: none; flex-direction: column; background: var(--chat-bg); }
+        header { background: var(--primary); color: white; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
         
-        /* Header */
-        header { background: #075e54; color: white; padding: 15px; display: flex; justify-content: space-between; align-items: center; }
-        #leave-btn { background: #ff4444; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; }
+        #messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 10px; }
+        .msg { padding: 8px 15px; border-radius: 10px; max-width: 80%; position: relative; font-size: 15px; animation: fadeIn 0.3s ease; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .own { background: #dcf8c6; align-self: flex-end; border-bottom-right-radius: 2px; }
+        .other { background: white; align-self: flex-start; border-bottom-left-radius: 2px; }
+        .meta { font-size: 10px; color: #777; margin-bottom: 4px; display: block; }
+        .ticks { font-size: 14px; margin-left: 5px; transition: 0.3s; }
 
-        /* Messages Area */
-        #messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; }
-        .message { margin-bottom: 15px; padding: 8px 12px; border-radius: 8px; max-width: 70%; position: relative; word-wrap: break-word; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
-        .own { background: #dcf8c6; align-self: flex-end; }
-        .other { background: white; align-self: flex-start; }
-        .system { background: #fff5c4; align-self: center; font-size: 12px; color: #555; }
-        .meta { font-size: 11px; color: #666; margin-bottom: 4px; }
-        .ticks { font-size: 14px; margin-left: 5px; }
-
-        /* Footer Input */
-        footer { background: #f0f0f0; padding: 10px; display: flex; align-items: center; }
-        #message-input { flex: 1; padding: 12px; border-radius: 20px; border: none; margin-right: 10px; }
-        #send-btn { background: #075e54; color: white; border: none; width: 45px; height: 45px; border-radius: 50%; cursor: pointer; }
-
-        #typing-indicator { padding: 5px 20px; font-size: 13px; color: #555; font-style: italic; background: #efe7de; height: 25px; }
+        #typing-status { font-size: 13px; color: #555; padding: 5px 25px; font-style: italic; min-height: 25px; }
+        footer { background: #f0f0f0; padding: 12px; display: flex; gap: 10px; align-items: center; }
+        #msg-input { flex: 1; border: none; padding: 12px 20px; border-radius: 25px; margin: 0; }
+        .send-btn { width: 45px; height: 45px; border-radius: 50%; background: var(--primary); display: flex; justify-content: center; align-items: center; padding: 0; }
     </style>
 </head>
 <body>
 
-    <div id="login-screen">
+    <div id="login-box">
         <h2>Ghost Chat</h2>
-        <form id="login-form">
-            <input type="text" id="username" placeholder="Your Name" required>
-            <input type="text" id="room-ip" placeholder="Room ID (Any name)" required>
-            <button type="submit" id="join-btn">
-                <span id="btn-text">JOIN ROOM</span>
-                <span id="btn-loader" class="hidden">Connecting...</span>
-            </button>
-        </form>
-        <div id="status" style="margin-top: 10px; font-size: 12px;"></div>
+        <input type="text" id="username" placeholder="Enter Your Name">
+        <input type="text" id="room-id" placeholder="Enter Room ID">
+        <button onclick="initGhostChat()">START CHATTING</button>
     </div>
 
-    <div id="chat-screen">
+    <div id="chat-ui">
         <header>
-            <div>
-                <strong id="display-room"></strong> <br>
-                <small id="online-count">Online: 0</small>
-            </div>
-            <div>
-                <span id="display-username" style="margin-right: 15px;"></span>
-                <button id="leave-btn">Exit</button>
-            </div>
+            <div><strong id="room-display"></strong></div>
+            <button onclick="location.reload()" style="background:transparent; border:1px solid white; width:auto; padding:5px 12px;">EXIT</button>
         </header>
-
         <div id="messages"></div>
-        <div id="typing-indicator"></div>
-
+        <div id="typing-status"></div>
         <footer>
-            <input type="text" id="message-input" placeholder="Type a message...">
-            <button id="send-btn">➔</button>
+            <input type="text" id="msg-input" placeholder="Type a message..." oninput="updateTyping()">
+            <button class="send-btn" onclick="sendMsg()">➔</button>
         </footer>
     </div>
 
     <script>
-        const socket = io();
+        // --- 1. Firebase Config ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyAC2NpHaaN8jTQg5G4GaISy76rnYSOGIqs",
+            authDomain: "my-chat-77ef9.firebaseapp.com",
+            databaseURL: "https://my-chat-77ef9-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "my-chat-77ef9",
+            storageBucket: "my-chat-77ef9.firebasestorage.app",
+            messagingSenderId: "201184055478",
+            appId: "1:201184055478:web:98e67e97e0b6c1f80ed617"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
 
-        // DOM Elements
-        const loginScreen = document.getElementById('login-screen');
-        const chatScreen = document.getElementById('chat-screen');
-        const loginForm = document.getElementById('login-form');
-        const usernameInput = document.getElementById('username');
-        const roomInput = document.getElementById('room-ip');
-        const statusDiv = document.getElementById('status');
-        const btnText = document.getElementById('btn-text');
-        const btnLoader = document.getElementById('btn-loader');
-        const messagesDiv = document.getElementById('messages');
-        const messageInput = document.getElementById('message-input');
-        const sendBtn = document.getElementById('send-btn');
-        const displayRoom = document.getElementById('display-room');
-        const displayUsername = document.getElementById('display-username');
-        const leaveBtn = document.getElementById('leave-btn');
-        const typingDiv = document.getElementById('typing-indicator');
-        const onlineCountDiv = document.getElementById('online-count');
+        let user, room, roomRef;
 
-        let currentUser = '';
-        let currentRoom = '';
+        function initGhostChat() {
+            user = document.getElementById('username').value.trim();
+            room = document.getElementById('room-id').value.trim();
+            if(!user || !room) return alert("All fields are required!");
 
-        // 1. Login Logic
-        loginForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            const username = usernameInput.value.trim();
-            const room = roomInput.value.trim();
-            
-            if (!username || !room) return;
-            
-            currentUser = username;
-            currentRoom = room;
-            
-            btnText.classList.add('hidden');
-            btnLoader.classList.remove('hidden');
-            socket.emit('join-room', { username, room });
-        });
+            roomRef = db.ref('rooms/' + room);
+            document.getElementById('login-box').classList.add('hidden');
+            document.getElementById('chat-ui').style.display = 'flex';
+            document.getElementById('room-display').innerText = "Ghost Room: " + room;
 
-        // 2. Joining Confirmation
-        socket.on('joined-room', ({ room, username }) => {
-            loginScreen.classList.add('hidden');
-            chatScreen.classList.add('active');
-            displayRoom.textContent = "Room: " + room;
-            displayUsername.textContent = username;
-            messagesDiv.innerHTML = '';
-            addSystemMessage(`Welcome to ${room}`);
-        });
+            // FEATURE: Auto-Delete Database on Disconnect
+            roomRef.onDisconnect().remove();
 
-        socket.on('update-user-count', (count) => {
-            onlineCountDiv.textContent = `Online: ${count}`;
-        });
+            // Listen for Messages
+            roomRef.child('msgs').on('child_added', (snap) => {
+                const data = snap.val();
+                renderMessage(data.user, data.text, data.user === user, snap.key, data.seen);
+                
+                if(data.user !== user) roomRef.child('msgs').child(snap.key).update({seen: true});
 
-        // 3. Typing Logic
-        messageInput.addEventListener('input', () => {
-            socket.emit('typing', { room: currentRoom, username: currentUser, isTyping: messageInput.value.length > 0 });
-        });
+                // GHOST FEATURE: Delete from screen after 60s
+                setTimeout(() => {
+                    const el = document.getElementById(snap.key);
+                    if(el) {
+                        el.style.opacity = '0';
+                        setTimeout(() => el.remove(), 500);
+                    }
+                }, 60000);
+            });
 
-        socket.on('display-typing', (data) => {
-            if (data.username !== currentUser) {
-                typingDiv.textContent = data.isTyping ? `${data.username} is typing...` : '';
-            }
-        });
-
-        // 4. Message Handling
-        function sendMessage() {
-            const message = messageInput.value.trim();
-            if (!message) return;
-            socket.emit('send-message', { room: currentRoom, message });
-            messageInput.value = '';
-            socket.emit('typing', { room: currentRoom, username: currentUser, isTyping: false });
-        }
-
-        sendBtn.addEventListener('click', sendMessage);
-        messageInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
-
-        socket.on('new-message', ({ username, message, timestamp }) => {
-            const isOwn = username === currentUser;
-            const msgElement = addMessage(username, message, isOwn, timestamp);
-            
-            if (!isOwn) socket.emit('mark-seen', { room: currentRoom, msgId: timestamp });
-
-            // 60s Auto-Delete Feature
-            setTimeout(() => {
-                if (msgElement) {
-                    msgElement.style.opacity = '0';
-                    msgElement.style.transform = 'scale(0.8)';
-                    setTimeout(() => msgElement.remove(), 500); 
+            // Listen for Blue Ticks
+            roomRef.child('msgs').on('child_changed', (snap) => {
+                const data = snap.val();
+                if(data.seen && data.user === user) {
+                    const tickEl = document.querySelector(`#${snap.key} .ticks`);
+                    if(tickEl) { tickEl.innerText = ' ✔✔'; tickEl.style.color = '#34B7F1'; }
                 }
-            }, 60000); 
-        });
+            });
 
-        socket.on('message-seen-update', (msgId) => {
-            const ticks = document.querySelector(`[data-id="${msgId}"] .ticks`);
-            if (ticks) {
-                ticks.textContent = ' ✔✔';
-                ticks.style.color = '#34B7F1';
-            }
-        });
-
-        // 5. Cleanup
-        function cleanupAndLeave() {
-            if (currentRoom) socket.emit('leave-room', { room: currentRoom });
-            window.location.reload(); 
+            // Listen for Typing
+            roomRef.child('typing').on('value', snap => {
+                const typers = Object.keys(snap.val() || {}).filter(t => t !== user);
+                document.getElementById('typing-status').innerText = typers.length ? typers.join(",") + " is typing..." : "";
+            });
         }
 
-        leaveBtn.addEventListener('click', cleanupAndLeave);
-        window.addEventListener('beforeunload', cleanupAndLeave);
+        function sendMsg() {
+            const input = document.getElementById('msg-input');
+            if(!input.value.trim()) return;
+            const msgData = { user: user, text: input.value, seen: false, time: Date.now() };
+            roomRef.child('msgs').push(msgData);
+            input.value = "";
+            roomRef.child('typing').child(user).remove();
+        }
 
-        // Helpers
-        function addMessage(username, message, isOwn, timestamp) {
+        function updateTyping() {
+            const input = document.getElementById('msg-input');
+            input.value.length > 0 ? roomRef.child('typing').child(user).set(true) : roomRef.child('typing').child(user).remove();
+        }
+
+        function renderMessage(sender, text, isOwn, id, isSeen) {
             const div = document.createElement('div');
-            div.className = `message ${isOwn ? 'own' : 'other'}`;
-            div.setAttribute('data-id', timestamp);
-            div.style.transition = 'all 0.5s ease';
-            
-            const time = new Date(timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-            const ticks = isOwn ? '<span class="ticks" style="color:gray;"> ✔</span>' : '';
-            
-            div.innerHTML = `
-                <div class="meta">${username} • ${time} ${ticks}</div>
-                <div class="text-content">${escapeHtml(message)}</div>
-            `;
-            
-            messagesDiv.appendChild(div);
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
-            return div;
+            div.id = id;
+            div.className = `msg ${isOwn ? 'own' : 'other'}`;
+            const tick = isOwn ? `<span class="ticks" style="color:${isSeen ? '#34B7F1':'#999'}">${isSeen ? ' ✔✔':' ✔'}</span>` : '';
+            div.innerHTML = `<span class="meta">${sender}</span>${text} ${tick}`;
+            document.getElementById('messages').appendChild(div);
+            document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
         }
 
-        function addSystemMessage(text) {
-            const div = document.createElement('div');
-            div.className = 'message system';
-            div.textContent = text;
-            messagesDiv.appendChild(div);
-            setTimeout(() => div.remove(), 5000);
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
-        }
-
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
+        document.getElementById('msg-input').addEventListener('keypress', (e) => { if(e.key === 'Enter') sendMsg(); });
     </script>
 </body>
 </html>
-urn div.innerHTML;
-}
