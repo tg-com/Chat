@@ -3,465 +3,250 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Chat - Room-Based Messenger</title>
-    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <title>Gost Chat - Admin Pro Max</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-
         :root {
-            --primary: #6366f1;
-            --primary-dark: #4f46e5;
-            --accent: #a855f7;
-            --pink: #ec4899;
-            --bg: #0a0e1a;
-            --bg-card: #111827;
-            --bg-hover: #1a2235;
-            --bg-input: #1e293b;
-            --border: #2d3748;
-            --border-light: #374151;
-            --text: #f1f5f9;
-            --text-muted: #64748b;
-            --text-secondary: #94a3b8;
-            --success: #10b981;
-            --danger: #ef4444;
-            --admin-color: #f59e0b;
-            --msg-bg-self: #312e81;
-            --msg-bg-other: #1e293b;
+            --primary: #6366f1; --bg-dark: #0f172a; --bg-card: #1e293b;
+            --bg-input: #334155; --text: #f1f5f9; --border: #475569;
+            --success: #10b981; --error: #ef4444; --warning: #facc15;
         }
 
         body {
-            font-family: 'DM Sans', sans-serif;
-            background: var(--bg);
-            min-height: 100vh;
-            color: var(--text);
-            overflow-x: hidden;
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%);
+            height: 100vh; color: var(--text); overflow: hidden;
         }
 
-        /* ===== LOGIN PAGE ===== */
-        #loginPage {
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            background: linear-gradient(135deg, #0a0e1a 0%, #1a1040 50%, #0a0e1a 100%);
-        }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; height: 100vh; display: flex; flex-direction: column; }
 
-        .bg-glow {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none;
-        }
-        .bg-glow::before {
-            content: '';
-            position: absolute;
-            width: 600px; height: 600px;
-            background: radial-gradient(circle, rgba(99,102,241,0.12) 0%, transparent 70%);
-            top: -100px; left: -100px;
-            animation: float 20s ease-in-out infinite;
-        }
-        .bg-glow::after {
-            content: '';
-            position: absolute;
-            width: 400px; height: 400px;
-            background: radial-gradient(circle, rgba(168,85,247,0.08) 0%, transparent 70%);
-            bottom: 0; right: 0;
-            animation: float 15s ease-in-out infinite reverse;
-        }
-        @keyframes float { 0%,100%{transform:translate(0,0)} 50%{transform:translate(30px,20px)} }
+        /* Screens Management */
+        #login-screen { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+        #chat-screen { display: none; flex-direction: column; flex: 1; background: var(--bg-card); border-radius: 20px; border: 1px solid var(--border); overflow: hidden; position: relative; }
 
-        .login-container {
-            position: relative; z-index: 1;
-            max-width: 1100px; margin: 0 auto; padding: 30px 20px;
-            min-height: 100vh; display: flex; flex-direction: column;
+        /* Sidebar */
+        .sidebar {
+            position: fixed; right: -300px; top: 0; width: 280px; height: 100%;
+            background: rgba(30, 41, 59, 0.95); backdrop-filter: blur(15px);
+            border-left: 1px solid var(--border); padding: 25px; transition: 0.4s; z-index: 1000;
         }
+        .sidebar.active { right: 0; }
 
-        .login-header { text-align: center; padding: 50px 20px 40px; }
-        .logo-text {
-            font-family: 'Syne', sans-serif;
-            font-size: 3.2rem; font-weight: 800;
-            background: linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            background-clip: text; letter-spacing: -2px;
-        }
-        .logo-bracket { color: var(--primary); }
-        .tagline { color: var(--text-muted); font-size: 1rem; margin-top: 10px; }
+        /* Chat Layout */
+        #msg-box { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; background: rgba(15, 23, 42, 0.4); }
+        .bubble { max-width: 75%; padding: 12px; border-radius: 15px; position: relative; word-wrap: break-word; }
+        .mine { align-self: flex-end; background: var(--primary); border-bottom-right-radius: 2px; }
+        .others { align-self: flex-start; background: var(--bg-input); border-bottom-left-radius: 2px; }
+        
+        /* Admin Elements */
+        .admin-badge { font-size: 9px; background: var(--warning); color: #000; padding: 2px 6px; border-radius: 4px; margin-left: 5px; font-weight: bold; }
+        .action-row { display: flex; align-items: center; width: 100%; gap: 10px; margin-bottom: 12px; }
+        .kick-btn { color: var(--error); cursor: pointer; margin-left: auto; font-size: 14px; }
+        .admin-tools { padding: 10px; border-top: 1px solid var(--border); background: rgba(0,0,0,0.2); display: none; justify-content: center; }
 
-        .login-main { flex: 1; display: flex; justify-content: center; align-items: center; }
+        /* System Messages */
+        .sys-msg { align-self: center; background: rgba(255,255,255,0.05); font-size: 11px; padding: 5px 15px; border-radius: 20px; color: var(--text-secondary); border: 1px solid var(--border); }
 
-        .login-card {
-            background: var(--bg-card);
-            border-radius: 24px; padding: 44px 40px;
-            width: 100%; max-width: 460px;
-            border: 1px solid var(--border);
-            box-shadow: 0 30px 60px -15px rgba(0,0,0,0.6);
-            animation: slideUp 0.6s ease-out both;
-        }
-        @keyframes slideUp { from{opacity:0;transform:translateY(30px)} to{opacity:1;transform:translateY(0)} }
-
-        .card-title {
-            font-family: 'Syne', sans-serif;
-            font-size: 1.4rem; font-weight: 700;
-            text-align: center; margin-bottom: 32px;
-        }
-
-        .form-group { margin-bottom: 22px; }
-        .form-label {
-            display: block; margin-bottom: 8px;
-            font-size: 0.75rem; font-weight: 600;
-            color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1.5px;
-        }
-        .input-wrap { position: relative; }
-        .form-input {
-            width: 100%; padding: 14px 44px 14px 18px;
-            background: var(--bg-input); border: 2px solid var(--border);
-            border-radius: 12px; color: var(--text);
-            font-size: 0.95rem; font-family: 'DM Sans', sans-serif;
-            transition: all 0.25s ease;
-        }
-        .form-input:focus {
-            outline: none; border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(99,102,241,0.2);
-        }
-        .form-input::placeholder { color: var(--text-muted); }
-        .input-icon {
-            position: absolute; right: 14px; top: 50%;
-            transform: translateY(-50%); color: var(--text-muted); font-size: 0.9rem;
-        }
-        .hint { font-size: 0.78rem; color: var(--text-muted); margin-top: 7px; display: flex; align-items: center; gap: 5px; }
-
-        .btn-join {
-            width: 100%; padding: 15px;
-            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-            border: none; border-radius: 12px; color: white;
-            font-family: 'Syne', sans-serif; font-size: 0.95rem; font-weight: 700;
-            letter-spacing: 1px; text-transform: uppercase;
-            cursor: pointer; transition: all 0.3s ease;
-            margin-top: 8px; position: relative; overflow: hidden;
-        }
-        .btn-join:hover { transform: translateY(-2px); box-shadow: 0 12px 30px -8px rgba(99,102,241,0.55); }
-        .btn-join::after {
-            content: ''; position: absolute; top: 0; left: -100%; width: 100%; height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
-            transition: 0.5s;
-        }
-        .btn-join:hover::after { left: 100%; }
-
-        .login-status {
-            text-align: center; margin-top: 18px; padding: 11px 16px;
-            border-radius: 10px; font-size: 0.875rem; display: none;
-        }
-        .login-status.connecting { display: block; background: rgba(99,102,241,0.1); color: var(--primary); border: 1px solid rgba(99,102,241,0.25); }
-        .login-status.success { display: block; background: rgba(16,185,129,0.1); color: var(--success); border: 1px solid rgba(16,185,129,0.25); }
-        .login-status.error { display: block; background: rgba(239,68,68,0.1); color: var(--danger); border: 1px solid rgba(239,68,68,0.25); }
-
-        .features-grid {
-            display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
-            margin-top: 36px; animation: slideUp 0.6s 0.2s ease-out both;
-        }
-        .feat-card {
-            background: var(--bg-card); padding: 22px 18px;
-            border-radius: 16px; text-align: center;
-            border: 1px solid var(--border); transition: all 0.3s ease;
-        }
-        .feat-card:hover { transform: translateY(-4px); border-color: var(--primary); box-shadow: 0 8px 25px -8px rgba(99,102,241,0.3); }
-        .feat-icon { font-size: 1.6rem; color: var(--primary); margin-bottom: 10px; }
-        .feat-title { font-family: 'Syne', sans-serif; font-size: 0.875rem; font-weight: 700; margin-bottom: 5px; }
-        .feat-desc { font-size: 0.78rem; color: var(--text-muted); }
-
-        .login-footer { text-align: center; padding: 24px; color: var(--text-muted); font-size: 0.8rem; }
-
-        /* ===== CHAT PAGE ===== */
-        #chatPage {
-            display: none;
-            height: 100vh;
-            flex-direction: column;
-            background: var(--bg);
-        }
-
-        /* Chat Header */
-        .chat-header {
-            background: var(--bg-card);
-            border-bottom: 1px solid var(--border);
-            padding: 14px 20px;
-            display: flex; align-items: center; justify-content: space-between;
-            flex-shrink: 0;
-        }
-        .chat-header-left { display: flex; align-items: center; gap: 12px; }
-        .room-icon {
-            width: 38px; height: 38px;
-            background: linear-gradient(135deg, var(--primary), var(--accent));
-            border-radius: 10px; display: flex; align-items: center; justify-content: center;
-            font-size: 1rem;
-        }
-        .room-name {
-            font-family: 'Syne', sans-serif; font-size: 1.1rem; font-weight: 700;
-        }
-        .room-code-badge {
-            font-size: 0.72rem; color: var(--text-muted);
-            background: var(--bg-input); padding: 3px 8px; border-radius: 6px;
-            border: 1px solid var(--border); margin-left: 4px;
-        }
-        .chat-header-right { display: flex; align-items: center; gap: 10px; }
-        .online-count-badge {
-            display: flex; align-items: center; gap: 6px;
-            background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.25);
-            color: var(--success); padding: 5px 12px; border-radius: 20px;
-            font-size: 0.8rem; font-weight: 600; cursor: pointer;
-            transition: all 0.2s;
-        }
-        .online-count-badge:hover { background: rgba(16,185,129,0.18); }
-        .online-dot { width: 7px; height: 7px; background: var(--success); border-radius: 50%; animation: blink 2s infinite; }
-        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.4} }
-        .btn-leave {
-            padding: 7px 14px; background: transparent;
-            border: 1px solid var(--border); border-radius: 8px;
-            color: var(--text-muted); font-size: 0.82rem; cursor: pointer;
-            transition: all 0.2s; font-family: 'DM Sans', sans-serif;
-        }
-        .btn-leave:hover { border-color: var(--danger); color: var(--danger); }
-
-        /* Chat Body */
-        .chat-body {
-            flex: 1; display: flex; overflow: hidden;
-        }
-
-        /* Users Sidebar */
-        .users-sidebar {
-            width: 220px; flex-shrink: 0;
-            background: var(--bg-card);
-            border-right: 1px solid var(--border);
-            display: flex; flex-direction: column;
-            overflow: hidden;
-        }
-        .sidebar-header {
-            padding: 16px 16px 12px;
-            border-bottom: 1px solid var(--border);
-        }
-        .sidebar-title {
-            font-family: 'Syne', sans-serif;
-            font-size: 0.72rem; font-weight: 700;
-            text-transform: uppercase; letter-spacing: 1.5px;
-            color: var(--text-muted); display: flex; align-items: center; gap: 6px;
-        }
-        .users-list {
-            flex: 1; overflow-y: auto; padding: 10px 8px;
-        }
-        .users-list::-webkit-scrollbar { width: 4px; }
-        .users-list::-webkit-scrollbar-track { background: transparent; }
-        .users-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-
-        .user-item {
-            display: flex; align-items: center; gap: 9px;
-            padding: 9px 10px; border-radius: 10px;
-            margin-bottom: 3px; transition: background 0.15s;
-        }
-        .user-item:hover { background: var(--bg-hover); }
-        .user-avatar {
-            width: 32px; height: 32px; border-radius: 9px;
-            display: flex; align-items: center; justify-content: center;
-            font-family: 'Syne', sans-serif; font-size: 0.8rem; font-weight: 700;
-            flex-shrink: 0; position: relative;
-        }
-        .user-online-ring {
-            position: absolute; bottom: -1px; right: -1px;
-            width: 9px; height: 9px; background: var(--success);
-            border-radius: 50%; border: 2px solid var(--bg-card);
-        }
-        .user-info { flex: 1; min-width: 0; }
-        .user-name {
-            font-size: 0.83rem; font-weight: 600;
-            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-        }
-        .user-name.is-you { color: var(--primary); }
-        .user-role { font-size: 0.68rem; color: var(--text-muted); }
-        .admin-crown {
-            color: var(--admin-color); font-size: 0.7rem; margin-left: 3px;
-        }
-
-        /* Messages Area */
-        .messages-area {
-            flex: 1; display: flex; flex-direction: column; overflow: hidden;
-        }
-        .messages-list {
-            flex: 1; overflow-y: auto; padding: 20px 20px 10px;
-        }
-        .messages-list::-webkit-scrollbar { width: 5px; }
-        .messages-list::-webkit-scrollbar-track { background: transparent; }
-        .messages-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-
-        /* System Message */
-        .sys-msg {
-            text-align: center; margin: 12px 0;
-            font-size: 0.75rem; color: var(--text-muted);
-        }
-        .sys-msg span {
-            background: var(--bg-card); padding: 5px 14px;
-            border-radius: 20px; border: 1px solid var(--border);
-        }
-
-        /* Message Bubble */
-        .msg-wrapper {
-            display: flex; gap: 10px; margin-bottom: 14px;
-            animation: msgIn 0.25s ease-out;
-        }
-        @keyframes msgIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
-        .msg-wrapper.self { flex-direction: row-reverse; }
-
-        .msg-avatar {
-            width: 34px; height: 34px; border-radius: 9px;
-            display: flex; align-items: center; justify-content: center;
-            font-family: 'Syne', sans-serif; font-size: 0.78rem; font-weight: 700;
-            flex-shrink: 0; align-self: flex-end;
-        }
-        .msg-content { max-width: 65%; }
-        .msg-meta {
-            display: flex; align-items: center; gap: 6px;
-            margin-bottom: 4px; font-size: 0.72rem; color: var(--text-muted);
-        }
-        .msg-wrapper.self .msg-meta { justify-content: flex-end; }
-        .msg-sender { font-weight: 600; color: var(--text-secondary); }
-        .msg-sender.admin-sender { color: var(--admin-color); }
-        .msg-time { font-size: 0.68rem; }
-        .admin-badge-msg {
-            font-size: 0.63rem; color: var(--admin-color);
-            background: rgba(245,158,11,0.12); padding: 1px 6px;
-            border-radius: 4px; border: 1px solid rgba(245,158,11,0.2);
-        }
-
-        .msg-bubble {
-            padding: 10px 14px; border-radius: 14px;
-            font-size: 0.88rem; line-height: 1.5; word-break: break-word;
-            position: relative;
-        }
-        .msg-wrapper.self .msg-bubble {
-            background: var(--msg-bg-self);
-            border-bottom-right-radius: 4px;
-        }
-        .msg-wrapper:not(.self) .msg-bubble {
-            background: var(--msg-bg-other);
-            border-bottom-left-radius: 4px;
-        }
-
-        .delete-btn {
-            position: absolute; top: 4px; right: 6px;
-            background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.2);
-            color: var(--danger); border-radius: 5px;
-            width: 22px; height: 22px; display: none;
-            align-items: center; justify-content: center;
-            cursor: pointer; font-size: 0.65rem; transition: all 0.2s;
-        }
-        .delete-btn:hover { background: rgba(239,68,68,0.25); }
-        /* Show delete btn for admin */
-        body.is-admin .msg-bubble:hover .delete-btn { display: flex; }
-        /* Self can also delete own messages */
-        .msg-wrapper.self .msg-bubble:hover .delete-btn { display: flex; }
-
-        /* Expiry indicator */
-        .msg-expiry {
-            font-size: 0.63rem; color: var(--text-muted);
-            text-align: right; margin-top: 3px;
-            display: flex; align-items: center; justify-content: flex-end; gap: 3px;
-        }
-        .msg-wrapper:not(.self) .msg-expiry { justify-content: flex-start; }
-
-        /* Input Area */
-        .input-area {
-            padding: 16px 20px;
-            background: var(--bg-card);
-            border-top: 1px solid var(--border);
-            display: flex; gap: 10px; align-items: center;
-        }
-        .chat-input {
-            flex: 1; padding: 12px 16px;
-            background: var(--bg-input); border: 2px solid var(--border);
-            border-radius: 12px; color: var(--text);
-            font-size: 0.9rem; font-family: 'DM Sans', sans-serif;
-            transition: border-color 0.2s;
-        }
-        .chat-input:focus { outline: none; border-color: var(--primary); }
-        .chat-input::placeholder { color: var(--text-muted); }
-        .send-btn {
-            width: 44px; height: 44px;
-            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-            border: none; border-radius: 12px; color: white;
-            font-size: 0.95rem; cursor: pointer; transition: all 0.2s;
-            display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-        }
-        .send-btn:hover { transform: scale(1.05); box-shadow: 0 6px 20px -6px rgba(99,102,241,0.5); }
-        .send-btn:active { transform: scale(0.98); }
-
-        /* Admin notice */
-        .admin-notice {
-            background: rgba(245,158,11,0.08);
-            border: 1px solid rgba(245,158,11,0.2);
-            border-radius: 10px; padding: 9px 14px;
-            font-size: 0.78rem; color: var(--admin-color);
-            display: flex; align-items: center; gap: 7px;
-            margin: 0 20px 12px;
-        }
-
-        /* Users Panel Overlay (mobile) */
-        .users-overlay {
-            display: none; position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.6); z-index: 100;
-            backdrop-filter: blur(4px);
-        }
-        .users-panel-mobile {
-            position: absolute; right: 0; top: 0; height: 100%;
-            width: 260px; background: var(--bg-card);
-            border-left: 1px solid var(--border);
-            padding: 20px 16px; overflow-y: auto;
-        }
-        .close-panel { float: right; background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1.1rem; }
-
-        /* Scrollbar */
-        * { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
-
-        /* Responsive */
-        @media (max-width: 700px) {
-            .users-sidebar { display: none; }
-            .features-grid { grid-template-columns: 1fr; }
-            .login-card { padding: 32px 22px; }
-        }
-
-        /* Toast */
-        .toast {
-            position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px);
-            background: var(--bg-card); border: 1px solid var(--border);
-            padding: 12px 20px; border-radius: 12px;
-            font-size: 0.85rem; color: var(--text);
-            box-shadow: 0 10px 30px rgba(0,0,0,0.4);
-            transition: transform 0.3s ease; z-index: 999;
-        }
-        .toast.show { transform: translateX(-50%) translateY(0); }
-        .toast.admin { border-color: rgba(245,158,11,0.4); }
-
-        /* Empty state */
-        .empty-chat {
-            flex: 1; display: flex; flex-direction: column;
-            align-items: center; justify-content: center;
-            color: var(--text-muted); gap: 10px;
-        }
-        .empty-icon { font-size: 3rem; opacity: 0.3; }
-        .empty-text { font-size: 0.9rem; }
+        /* Buttons & Inputs */
+        .input-area { padding: 15px; border-top: 1px solid var(--border); display: flex; gap: 10px; align-items: center; }
+        .input-wrap { flex: 1; display: flex; background: var(--bg-input); border-radius: 30px; padding: 5px 15px; border: 1px solid var(--border); }
+        input { flex: 1; background: transparent; border: none; color: white; padding: 10px; outline: none; }
+        .btn-send { background: var(--primary); border: none; color: white; width: 45px; height: 45px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+        .btn-clear { background: var(--error); color: white; border: none; padding: 8px 15px; border-radius: 8px; font-size: 12px; cursor: pointer; font-weight: bold; }
     </style>
 </head>
 <body>
-<div class="bg-glow"></div>
 
-<!-- ===== LOGIN PAGE ===== -->
-<div id="loginPage">
-    <div class="login-container">
-        <div class="login-header">
-            <h1 class="logo-text"><span class="logo-bracket">[</span>MYCHAT<span class="logo-bracket">]</span></h1>
-            <p class="tagline">Enter a shared room code to join the same chat</p>
+<div class="container">
+    <div id="login-screen">
+        <h1 style="font-size: 3rem; margin-bottom: 10px; background: linear-gradient(to right, #6366f1, #a855f7); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">[SHIKSHACOREX]</h1>
+        <p style="color: var(--text-secondary); margin-bottom: 30px;">Professional Admin-Led Communication</p>
+        <div style="background: var(--bg-card); padding: 40px; border-radius: 24px; border: 1px solid var(--border); width: 100%; max-width: 400px;">
+            <input type="text" id="username" placeholder="Your Name" style="width:100%; padding:15px; margin-bottom:15px; border-radius:12px; background:var(--bg-input); border:1px solid var(--border); color:white;">
+            <input type="text" id="roomcode" placeholder="Room Code" style="width:100%; padding:15px; margin-bottom:20px; border-radius:12px; background:var(--bg-input); border:1px solid var(--border); color:white;">
+            <button onclick="startChat()" style="width: 100%; padding: 15px; background: var(--primary); border: none; border-radius: 12px; color: white; font-weight: bold; cursor: pointer;">ENTER ROOM</button>
+        </div>
+    </div>
+
+    <div id="chat-screen">
+        <header style="padding: 15px 25px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: rgba(30, 41, 59, 0.5);">
+            <div>
+                <h3 id="display-room">Room: ---</h3>
+                <small id="online-count" style="color: var(--success); cursor: pointer;" onclick="toggleSide()">● 0 Users Online</small>
+            </div>
+            <div style="display: flex; gap: 15px; align-items: center;">
+                <div id="typing-ui" style="font-size: 11px; color: var(--primary); visibility: hidden;">typing...</div>
+                <i class="fas fa-sign-out-alt" onclick="location.reload()" style="cursor: pointer; opacity: 0.7;"></i>
+            </div>
+        </header>
+
+        <div id="admin-tools-bar" class="admin-tools">
+            <button class="btn-clear" onclick="clearAllChat()"><i class="fas fa-trash-alt"></i> Clear All Chat</button>
         </div>
 
-        <div class="login-main">
-            <div class="login-card">
-                <h2 class="card-title">Join Chat Room</h2>
+        <div id="msg-box"></div>
 
-                <div id="loginForm">
-                    <div class="form-group">
-                        <label class="form-label">Username</label>
-                        <div class="input-wrap">
-                            <input
+        <div class="input-area">
+            <div class="input-wrap">
+                <input type="text" id="msg-input" placeholder="Type a message..." oninput="broadcastTyping()">
+            </div>
+            <button class="btn-send" onclick="sendToFirebase()"><i class="fas fa-paper-plane"></i></button>
+        </div>
+    </div>
+</div>
+
+<div id="side-panel" class="sidebar">
+    <div style="display:flex; justify-content:space-between; margin-bottom:25px; align-items:center;">
+        <h3 style="font-size: 1.2rem;">Online Users</h3>
+        <i class="fas fa-times" onclick="toggleSide()" style="cursor:pointer;"></i>
+    </div>
+    <div id="user-render-list"></div>
+</div>
+
+<script>
+    // --- 1. CONFIG (Paste your keys here) ---
+    const firebaseConfig = {
+        apiKey: "YOUR_API_KEY",
+        authDomain: "YOUR_PROJECT.firebaseapp.com",
+        databaseURL: "https://YOUR_PROJECT.firebaseio.com",
+        projectId: "YOUR_PROJECT",
+        storageBucket: "YOUR_PROJECT.appspot.com",
+        messagingSenderId: "YOUR_ID",
+        appId: "YOUR_APP_ID"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+    let me, room, isAdmin = false;
+
+    // --- 2. JOIN LOGIC ---
+    function startChat() {
+        me = document.getElementById('username').value.trim();
+        room = document.getElementById('roomcode').value.trim();
+        if(!me || !room) return alert("Please fill details");
+
+        document.getElementById('login-screen').style.display = 'none';
+        document.getElementById('chat-screen').style.display = 'flex';
+        document.getElementById('display-room').innerText = "Room: " + room;
+
+        const roomRef = db.ref(`rooms/${room}`);
+
+        // Admin Claim Logic
+        roomRef.child('admin').transaction(current => {
+            return current === null ? me : current;
+        }, (err, committed, snap) => {
+            if (snap.val() === me) {
+                isAdmin = true;
+                document.getElementById('admin-tools-bar').style.display = 'flex';
+            }
+            enterPresence();
+        });
+    }
+
+    function enterPresence() {
+        const myRef = db.ref(`rooms/${room}/users/${me}`);
+        myRef.set({ name: me, isAdmin: isAdmin });
+        myRef.onDisconnect().remove();
+
+        // Listen Users & Kicks
+        db.ref(`rooms/${room}/users`).on('value', snap => {
+            const users = snap.val() || {};
+            if (!users[me]) { alert("Admin has removed you."); location.reload(); }
+            
+            const userArr = Object.values(users);
+            document.getElementById('online-count').innerText = `● ${userArr.length} Users Online`;
+            renderSidebar(users);
+        });
+
+        listenMessages();
+    }
+
+    // --- 3. CHAT LOGIC ---
+    function sendToFirebase() {
+        const txt = document.getElementById('msg-input').value.trim();
+        if(!txt) return;
+        db.ref(`rooms/${room}/chats`).push({
+            sender: me,
+            text: txt,
+            time: Date.now()
+        });
+        document.getElementById('msg-input').value = "";
+    }
+
+    function listenMessages() {
+        const chatRef = db.ref(`rooms/${room}/chats`);
+        
+        // Listen for new messages
+        chatRef.on('child_added', snap => {
+            drawBubble(snap.val(), snap.key);
+        });
+
+        // Listen for Clear Chat (Deleted messages)
+        chatRef.on('child_removed', () => {
+            document.getElementById('msg-box').innerHTML = '<div class="sys-msg">Chat was cleared by Admin</div>';
+        });
+    }
+
+    function drawBubble(data, id) {
+        const box = document.getElementById('msg-box');
+        const div = document.createElement('div');
+        
+        if (data.sender === "SYSTEM") {
+            div.className = "sys-msg";
+            div.innerText = data.text;
+        } else {
+            div.className = `bubble ${data.sender === me ? 'mine' : 'others'}`;
+            div.innerHTML = `<small style="font-size:10px; opacity:0.6">${data.sender}</small><br>${data.text}`;
+        }
+        
+        box.appendChild(div);
+        box.scrollTop = box.scrollHeight;
+    }
+
+    // --- 4. ADMIN POWERS ---
+    function renderSidebar(users) {
+        const list = document.getElementById('user-render-list');
+        list.innerHTML = "";
+        Object.entries(users).forEach(([id, data]) => {
+            const div = document.createElement('div');
+            div.className = "action-row";
+            div.innerHTML = `
+                <div style="width:8px; height:8px; background:var(--success); border-radius:50%"></div>
+                <span style="font-size:14px;">${data.name} ${data.isAdmin ? '<span class="admin-badge">ADMIN</span>' : ''}</span>
+                ${isAdmin && data.name !== me ? `<i class="fas fa-user-slash kick-btn" onclick="kick('${data.name}')"></i>` : ''}
+            `;
+            list.appendChild(div);
+        });
+    }
+
+    function kick(target) {
+        if(confirm(`Kick ${target}?`)) {
+            db.ref(`rooms/${room}/users/${target}`).remove();
+            db.ref(`rooms/${room}/chats`).push({ sender: "SYSTEM", text: `${target} was kicked.` });
+        }
+    }
+
+    function clearAllChat() {
+        if(confirm("Dhyan dein! Poori chat delete ho jayegi. Continue?")) {
+            db.ref(`rooms/${room}/chats`).remove();
+        }
+    }
+
+    // --- 5. UI EXTRAS ---
+    function toggleSide() { document.getElementById('side-panel').classList.toggle('active'); }
+    
+    function broadcastTyping() {
+        // Typing indicator sync can be added here
+        const ui = document.getElementById('typing-ui');
+        ui.style.visibility = 'visible';
+        setTimeout(() => ui.style.visibility = 'hidden', 1000);
+    }
+</script>
+</body>
+</html>
