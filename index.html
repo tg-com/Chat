@@ -414,7 +414,7 @@ const db = firebase.database();
 let user = '', room = '', roomRef = null;
 let replyTarget = null;   // { key, sender, text }
 let ctxTarget   = null;   // { key, sender, text }
-const renderedKeys = new Set();   // BUG-FIX: prevent duplicate DOM messages
+const renderedKeys = new Set();   // prevent duplicate DOM messages
 const ghostTimers  = {};          // key → timerID
 
 // Swipe state
@@ -454,7 +454,7 @@ function initChat() {
   // ── Presence ──
   const myPresenceRef = roomRef.child('presence/' + safeKey(user));
   myPresenceRef.set({ name: user, ts: Date.now() });
-  myPresenceRef.onDisconnect().remove();  // only remove THIS user, not whole room
+  myPresenceRef.onDisconnect().remove();
 
   // Typing cleanup on disconnect
   roomRef.child('typing/' + safeKey(user)).onDisconnect().remove();
@@ -464,7 +464,7 @@ function initChat() {
     const n = snap.numChildren();
     document.getElementById('online-count').textContent = n + ' online';
 
-    // BUG-FIX: Delete room only when NO users remain (not on every disconnect)
+    // Delete room only when NO users remain
     if (n === 0 && roomRef) {
       roomRef.remove().catch(() => {});
     }
@@ -475,7 +475,6 @@ function initChat() {
     const d = snap.val();
     if (!d) return;
 
-    // BUG-FIX: skip already-rendered messages (fires on re-connect)
     if (renderedKeys.has(snap.key)) return;
     renderedKeys.add(snap.key);
 
@@ -577,7 +576,7 @@ function onInput(el) {
 }
 
 /* ════════════════════════════════════
-   RENDER MESSAGE  (BUG-FIX: was cut off before)
+   RENDER MESSAGE
 ════════════════════════════════════ */
 function appendMessage(key, sender, text, displayTime, timestamp, replyTo, isSeen) {
   const container = document.getElementById('messages');
@@ -609,3 +608,7 @@ function appendMessage(key, sender, text, displayTime, timestamp, replyTo, isSee
   if (replyTo && replyTo.text) {
     const qb = document.createElement('div');
     qb.className = 'quote-block';
+    qb.innerHTML =
+      `<span class="quote-name">${esc(replyTo.sender === user ? 'You' : replyTo.sender)}</span>` +
+      `<span class="quote-text">${esc(replyTo.text)}</span>`;
+    bu
