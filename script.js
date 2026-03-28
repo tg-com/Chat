@@ -1,208 +1,81 @@
-const socket = io();
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+const path = require('path');
 
-// DOM Elements
-const loginScreen = document.getElementById('login-screen');
-const chatScreen = document.getElementById('chat-screen');
-const loginForm = document.getElementById('login-form');
-const usernameInput = document.getElementById('username');
-const roomInput = document.getElementById('room-ip');
-const statusDiv = document.getElementById('status');
-const btnText = document.getElementById('btn-text');
-const btnLoader = document.getElementById('btn-loader');
-const messagesDiv = document.getElementById('messages');
-const messageInput = document.getElementById('message-input');
-const sendBtn = document.getElementById('send-btn');
-const displayRoom = document.getElementById('display-room');
-const displayUsername = document.getElementById('display-username');
-const leaveBtn = document.getElementById('leave-btn');
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server);
 
-let currentUser = '';
-let currentRoom = '';
+// Serve static files from the "public" folder
+app.use(express.static(path.join(__dirname, 'public')));
 
-// Connection status
-socket.on('connect', () => {
-    statusDiv.textContent = 'Connected to server';
-    statusDiv.className = 'status connected';
-});
+// Store rooms and their messages with timers
+const rooms = new Map(); // roomName -> { messages: Map<msgId, timer> }
 
-socket.on('disconnect', () => {
-    statusDiv.textContent = 'Disconnected from server';
-    statusDiv.className = 'status error';
-});
+io.on('connection', (socket) => {
+  console.log('New client connected:', socket.id);
 
-// Login handle
-loginForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const username = usernameInput.value.trim();
-    const room = roomInput.value.trim();
-    if (!username || !room) return;
-    
-    currentUser = username;
-    currentRoom = room;
-    
-    btnText.classList.add('hidden');
-    btnLoader.classList.remove('hidden');
-    socket.emit('join-room', { username, room });
-});
+  socket.on('join-room', ({ username, room }) => {
+    socket.join(room);
+    socket.data = { username, room };
 
-// Join confirmation
-socket.on('joined-room', ({ room, username }) => {
-    btnText.classList.remove('hidden');
-    btnLoader.classList.add('hidden');
-    loginScreen.classList.remove('active');
-    chatScreen.classList.add('active');
-    displayRoom.textContent = room;
-    displayUsername.textContent = username;
-    
-    // नए रूम में घुसते ही पुरानी चैट साफ़
-    messagesDiv.innerHTML = '';
-    addSystemMessage(`Welcome to room "${room}"`);
-});
+    // Notify others
+    socket.to(room).emit('user-joined', username);
 
-socket.on('user-joined', (username) => {
-    addSystemMessage(`${username} joined the room`);
-});
+    // Send existing messages? (optional, not implemented for simplicity)
+    socket.emit('joined-room', { room, username });
+  });
 
-socket.on('user-left', (username) => {
-    addSystemMessage(`${username} left the room`);
-});
+  socket.on('send-message', ({ room, message }) => {
+    const { username } = socket.data;
+    const msgId = Date.now() + '-' + Math.random(); // unique ID
+    const timestamp = Date.now();
+    const msgData = {
+      id: msgId,
+      username,
+      message,
+      timestamp,
+    };
 
-// --- फीचर: 60 सेकंड में मैसेज डिलीट ---
-socket.on('new-message', ({ username, message, timestamp }) => {
-    const isOwn = username === currentUser;
-    const msgElement = addMessage(username, message, isOwn, timestamp);
-    
-    // 60 सेकंड का टाइमर
-    setTimeout(() => {
-        if (msgElement) {
-            msgElement.style.opacity = '0';
-            setTimeout(() => msgElement.remove(), 500); 
-        }
-    }, 60000); 
-});
+    // Broadcast to everyone in the room
+    io.to(room).emit('new-message', msgData);
 
-socket.on('error', (message) => {
-    btnText.classList.remove('hidden');
-    btnLoader.classList.add('hidden');
-    statusDiv.textContent = message;
-    statusDiv.className = 'status error';
-});
+    // Set 60‑second auto‑delete
+    const timer = setTimeout(() => {
+      io.to(room).emit('delete-message', msgId);
+      // Clean up from our internal storage
+      if (rooms.has(room)) {
+        rooms.get(room).messages.delete(msgId);
+      }
+    }, 60000);
 
-// Message sending logic
-sendBtn.addEventListener('click', sendMessage);
-messageInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') sendMessage();
-});
-
-function sendMessage() {
-    const message = messageInput.value.trim();
-    if (!message) return;
-    socket.emit('send-message', { room: currentRoom, message });
-    messageInput.value = '';
-    messageInput.focus();
-}
-
-// --- फीचर: बटन या रिफ्रेश पर सब साफ़ करना ---
-function cleanupAndLeave() {
-    if (currentRoom) {
-        socket.emit('leave-room', { room: currentRoom });
+    // Store timer to allow cleanup on disconnect
+    if (!rooms.has(room)) {
+      rooms.set(room, { messages: new Map() });
     }
-    messagesDiv.innerHTML = ''; // चैट बॉक्स खाली
-    chatScreen.classList.remove('active');
-    loginScreen.classList.add('active');
-    usernameInput.value = '';
-    roomInput.value = '';
-    currentUser = '';
-    currentRoom = '';
-}
+    rooms.get(room).messages.set(msgId, timer);
+  });
 
-leaveBtn.addEventListener('click', cleanupAndLeave);
+  socket.on('leave-room', ({ room }) => {
+    const { username } = socket.data;
+    socket.leave(room);
+    socket.to(room).emit('user-left', username);
+    // Optionally clear all timers for this user's messages? Not implemented here.
+  });
 
-// पेज रिफ्रेश या बंद होने पर सुरक्षा
-window.addEventListener('beforeunload', cleanupAndLeave);
-
-// Helper functions
-function addMessage(username, message, isOwn, timestamp) {
-    const div = document.createElement('div');
-    div.className = `message ${isOwn ? 'own' : 'other'}`;
-    div.style.transition = 'opacity 0.5s ease-out';
-    
-    const time = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
-    
-    div.innerHTML = `
-        <div class="meta">${username} • ${time}</div>
-        <div>${escapeHtml(message)}</div>
-    `;
-    
-    messagesDiv.appendChild(div);
-    scrollToBottom();
-    return div;
-}
-
-function addSystemMessage(text) {
-    const div = document.createElement('div');
-    div.className = 'message system';
-    div.textContent = text;
-    messagesDiv.appendChild(div);
-    scrollToBottom();
-    // सिस्टम मैसेज 5 सेकंड में हटा दें
-    setTimeout(() => div.remove(), 5000);
-}
-
-function scrollToBottom() {
-    messagesDiv.scrollTop = messagesDiv.scrollHeight;
-}
-
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-    messageInput.value = '';
-    messageInput.focus();
-}
-
-// Leave room
-leaveBtn.addEventListener('click', () => {
-    socket.emit('leave-room', { room: currentRoom });
-    chatScreen.classList.remove('active');
-    loginScreen.classList.add('active');
-    usernameInput.value = '';
-    roomInput.value = '';
-    currentUser = '';
-    currentRoom = '';
+  socket.on('disconnect', () => {
+    console.log('Client disconnected:', socket.id);
+    const { username, room } = socket.data || {};
+    if (username && room) {
+      socket.to(room).emit('user-left', username);
+    }
+    // Timers are not cleared automatically; messages remain in memory.
+    // For simplicity we ignore cleaning them – they'll be cleared when the room is empty.
+  });
 });
 
-// Helper functions
-function addMessage(username, message, isOwn, timestamp) {
-    const div = document.createElement('div');
-    div.className = `message ${isOwn ? 'own' : 'other'}`;
-    
-    const time = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
-    
-    div.innerHTML = `
-        <div class="meta">${username} • ${time}</div>
-        <div>${escapeHtml(message)}</div>
-    `;
-    
-    messagesDiv.appendChild(div);
-    scrollToBottom();
-}
-
-function addSystemMessage(text) {
-    const div = document.createElement('div');
-    div.className = 'message system';
-    div.textContent = text;
-    messagesDiv.appendChild(div);
-    scrollToBottom();
-}
-
-function scrollToBottom() {
-    messagesDiv.scrollTop = messagesDiv.scrollHeight;
-}
-
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
+});
