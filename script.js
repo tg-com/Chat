@@ -1,81 +1,66 @@
-const express = require('express');
-const http = require('http');
-const { Server } = require('socket.io');
-const path = require('path');
+// Firebase SDKs को Import करें (CDN का उपयोग करके)
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getDatabase, ref, push, onChildAdded, remove, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-const app = express();
-const server = http.createServer(app);
-const io = new Server(server);
+// आपका Firebase कॉन्फ़िगरेशन
+const firebaseConfig = {
+  apiKey: "AIzaSyAC2NpHaaN8jTQg5G4GaISy76rnYSOGIqs",
+  authDomain: "my-chat-77ef9.firebaseapp.com",
+  databaseURL: "https://my-chat-77ef9-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "my-chat-77ef9",
+  storageBucket: "my-chat-77ef9.firebasestorage.app",
+  messagingSenderId: "201184055478",
+  appId: "1:201184055478:web:98e67e97e0b6c1f80ed617",
+  measurementId: "G-FQ37QH3P6G"
+};
 
-// Serve static files from the "public" folder
-app.use(express.static(path.join(__dirname, 'public')));
+// Firebase को Initialize करें
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+const messagesRef = ref(db, 'messages');
 
-// Store rooms and their messages with timers
-const rooms = new Map(); // roomName -> { messages: Map<msgId, timer> }
+// HTML Elements को पकड़ें
+const messageInput = document.getElementById('message-input');
+const sendBtn = document.getElementById('send-btn');
+const messagesDisplay = document.getElementById('messages-display');
 
-io.on('connection', (socket) => {
-  console.log('New client connected:', socket.id);
-
-  socket.on('join-room', ({ username, room }) => {
-    socket.join(room);
-    socket.data = { username, room };
-
-    // Notify others
-    socket.to(room).emit('user-joined', username);
-
-    // Send existing messages? (optional, not implemented for simplicity)
-    socket.emit('joined-room', { room, username });
-  });
-
-  socket.on('send-message', ({ room, message }) => {
-    const { username } = socket.data;
-    const msgId = Date.now() + '-' + Math.random(); // unique ID
-    const timestamp = Date.now();
-    const msgData = {
-      id: msgId,
-      username,
-      message,
-      timestamp,
-    };
-
-    // Broadcast to everyone in the room
-    io.to(room).emit('new-message', msgData);
-
-    // Set 60‑second auto‑delete
-    const timer = setTimeout(() => {
-      io.to(room).emit('delete-message', msgId);
-      // Clean up from our internal storage
-      if (rooms.has(room)) {
-        rooms.get(room).messages.delete(msgId);
-      }
-    }, 60000);
-
-    // Store timer to allow cleanup on disconnect
-    if (!rooms.has(room)) {
-      rooms.set(room, { messages: new Map() });
+// 1. मैसेज भेजने का फंक्शन
+function sendMessage() {
+    const text = messageInput.value.trim();
+    if (text !== "") {
+        push(messagesRef, {
+            username: "User_" + Math.floor(Math.random() * 100), // रैंडम नाम
+            message: text,
+            timestamp: serverTimestamp()
+        });
+        messageInput.value = ""; // इनपुट बॉक्स खाली करें
     }
-    rooms.get(room).messages.set(msgId, timer);
-  });
+}
 
-  socket.on('leave-room', ({ room }) => {
-    const { username } = socket.data;
-    socket.leave(room);
-    socket.to(room).emit('user-left', username);
-    // Optionally clear all timers for this user's messages? Not implemented here.
-  });
-
-  socket.on('disconnect', () => {
-    console.log('Client disconnected:', socket.id);
-    const { username, room } = socket.data || {};
-    if (username && room) {
-      socket.to(room).emit('user-left', username);
-    }
-    // Timers are not cleared automatically; messages remain in memory.
-    // For simplicity we ignore cleaning them – they'll be cleared when the room is empty.
-  });
+// बटन क्लिक और Enter की पर इवेंट लगायें
+sendBtn.addEventListener('click', sendMessage);
+messageInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') sendMessage();
 });
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+// 2. रीयलटाइम में मैसेज प्राप्त करने का फंक्शन
+onChildAdded(messagesRef, (data) => {
+    const msgData = data.val();
+    const msgId = data.key;
+
+    // स्क्रीन पर मैसेज दिखाएँ
+    const div = document.createElement('div');
+    div.id = msgId;
+    div.style.padding = "5px";
+    div.innerHTML = `<strong>${msgData.username}:</strong> ${msgData.message}`;
+    messagesDisplay.appendChild(div);
+
+    // ऑटो स्क्रॉल नीचे करें
+    messagesDisplay.scrollTop = messagesDisplay.scrollHeight;
+
+    // 3. 60 सेकंड बाद मैसेज डिलीट करने का लॉजिक (जैसा आपके पिछले कोड में था)
+    setTimeout(() => {
+        remove(ref(db, `messages/${msgId}`)); // डेटाबेस से डिलीट
+        div.remove(); // स्क्रीन से डिलीट
+    }, 60000);
 });
